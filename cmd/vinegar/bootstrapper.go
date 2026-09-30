@@ -39,6 +39,9 @@ type bootstrapper struct {
 	// amount of Roblox processes that are open
 	count uint
 
+	// nullable, see promptLogin
+	login *adw.AlertDialog
+
 	rp *studiorpc.StudioRPC
 }
 
@@ -154,6 +157,8 @@ func (b *bootstrapper) handleRobloxLog(line string) {
 				b.pfx.Kill()
 				b.showError(err)
 			})
+		} else {
+			gutil.IdleAdd(b.promptLogin)
 		}
 	case strings.Contains(line, "launching new studio instance"):
 		slog.Warn("New studio instance ran!")

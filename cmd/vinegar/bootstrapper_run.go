@@ -27,7 +27,8 @@ func (b *bootstrapper) command(args ...string) (*wine.Cmd, error) {
 
 	// This is an authentication call, which is ran to the main Studio instance,
 	// no point to run this with the launcher or seperate desktop.
-	if len(args) > 0 && strings.HasPrefix(args[0], "roblox-studio-auth:") {
+	if len(args) > 0 && strings.HasPrefix(args[0], authScheme) {
+		b.dismissLogin()
 		return cmd, nil
 	}
 
