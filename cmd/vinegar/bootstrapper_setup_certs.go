@@ -14,54 +14,52 @@ import (
 	. "github.com/pojntfx/go-gettext/pkg/i18n"
 )
 
-// systemCertFiles are the locations of the system CA bundle, in the
-// same order that Go's crypto/x509 checks them.
-var systemCertFiles = []string{
-	"/etc/ssl/certs/ca-certificates.crt",                // Debian/Ubuntu/Gentoo etc.
-	"/etc/pki/tls/certs/ca-bundle.crt",                  // Fedora/RHEL 6
-	"/etc/ssl/ca-bundle.pem",                            // OpenSUSE
-	"/etc/pki/tls/cacert.pem",                           // OpenELEC
-	"/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem", // CentOS/RHEL 7
-	"/etc/ssl/cert.pem",                                 // Alpine Linux
-	"/usr/local/share/certs/ca-root-nss.crt",            // FreeBSD
-}
+// certsMarker precedes every certificate added to Studio's bundle, which
+// are always appended after Studio's own certificates.
+const certsMarker = "\n# Added by Vinegar from "
 
-// systemCerts returns the path and contents of the system CA bundle.
-func systemCerts() (string, []byte, error) {
-	files := systemCertFiles
-	if f := os.Getenv("SSL_CERT_FILE"); f != "" {
-		files = []string{f}
-	}
-
-	for _, f := range files {
-		b, err := os.ReadFile(f)
-		if err == nil {
-			return f, b, nil
-		}
-	}
-	return "", nil, errors.New("system CA bundle not found")
-}
-
-// trustSystemCerts appends the certificates trusted by the system to
-// Studio's bundled CA certificates, which Studio uses exclusively for
+// addStudioCerts adds the certificates from the configured CA certificates
+// file to Studio's bundled CA certificates, which Studio uses exclusively for
 // its own HTTPS requests. Without this, Studio rejects connections made
-// through a TLS-intercepting proxy (such as one used by a VM) that the
-// system otherwise trusts. Only certificates missing from Studio's
-// bundle are added, and Studio re-extracts its bundle on every update.
-func (b *bootstrapper) trustSystemCerts() error {
+// through a TLS-intercepting proxy (such as one used by a VM) even when the
+// system trusts the proxy's CA.
+//
+// This is opt-in and scoped to the configured file: certificates previously
+// added by Vinegar are always removed first, restoring Studio's own bundle
+// when no file is configured. Studio re-extracts its bundle on every update.
+func (b *bootstrapper) addStudioCerts() error {
 	bundle := filepath.Join(b.dir, "ssl", "cacert.pem")
-	studio, err := os.ReadFile(bundle)
+	data, err := os.ReadFile(bundle)
 	if errors.Is(err, os.ErrNotExist) {
-		slog.Warn("Studio CA bundle missing, not adding system certificates")
+		if b.cfg.Studio.CACerts != "" {
+			slog.Warn("Studio CA bundle missing, not adding certificates")
+		}
 		return nil
 	} else if err != nil {
 		return err
 	}
 
-	name, system, err := systemCerts()
-	if err != nil {
-		slog.Warn("Not adding system certificates to Studio", "err", err)
+	studio := data
+	if i := bytes.Index(data, []byte(certsMarker)); i >= 0 {
+		studio = data[:i]
+	}
+
+	name := b.cfg.Studio.CACerts
+	if name == "" {
+		if len(studio) != len(data) {
+			slog.Info("Restoring Studio CA bundle", "bundle", bundle)
+			return os.WriteFile(bundle, studio, 0o644)
+		}
 		return nil
+	}
+
+	extra, err := os.ReadFile(name)
+	if err != nil {
+		return fmt.Errorf("ca certificates: %w", err)
+	}
+	certs := pemCerts(extra)
+	if len(certs) == 0 {
+		return fmt.Errorf("ca certificates: no certificates in %s", name)
 	}
 
 	have := make(map[[sha256.Size]byte]bool)
@@ -69,35 +67,27 @@ func (b *bootstrapper) trustSystemCerts() error {
 		have[sha256.Sum256(c.Raw)] = true
 	}
 
-	var add bytes.Buffer
-	for _, c := range pemCerts(system) {
+	out := bytes.NewBuffer(bytes.Clone(studio))
+	for _, c := range certs {
 		sum := sha256.Sum256(c.Raw)
 		if have[sum] {
 			continue
 		}
 		have[sum] = true
 
-		slog.Info("Adding system certificate to Studio",
+		slog.Info("Adding CA certificate to Studio",
 			"subject", c.Subject.String(), "sha256", fmt.Sprintf("%x", sum))
-		fmt.Fprintf(&add, "\n# Added by Vinegar from %s\n# %s\n", name, c.Subject)
-		if err := pem.Encode(&add, &pem.Block{Type: "CERTIFICATE", Bytes: c.Raw}); err != nil {
+		fmt.Fprintf(out, "%s%s\n# %s\n", certsMarker, name, c.Subject)
+		if err := pem.Encode(out, &pem.Block{Type: "CERTIFICATE", Bytes: c.Raw}); err != nil {
 			return err
 		}
 	}
-	if add.Len() == 0 {
+	if bytes.Equal(out.Bytes(), data) {
 		return nil
 	}
 
-	b.message(L("Adding System Certificates"), "bundle", bundle, "from", name)
-
-	f, err := os.OpenFile(bundle, os.O_WRONLY|os.O_APPEND, 0)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	_, err = add.WriteTo(f)
-	return err
+	b.message(L("Adding CA Certificates"), "bundle", bundle, "from", name)
+	return os.WriteFile(bundle, out.Bytes(), 0o644)
 }
 
 // pemCerts returns all valid certificates in the given PEM data.

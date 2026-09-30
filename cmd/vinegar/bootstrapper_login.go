@@ -16,6 +16,10 @@ const authScheme = "roblox-studio-auth:"
 // promptLogin shows a dialog alongside Studio's browser login, where the
 // roblox-studio-auth URI can optionally be pasted in, instead of relying
 // on the browser to open it with Vinegar. Must be called from the main thread.
+//
+// It is shown when Studio is launched without an authenticated user, when
+// Studio falls back to browser login, and when Studio opens its sign in
+// page in the browser.
 func (b *bootstrapper) promptLogin() {
 	if b.login != nil {
 		return
@@ -25,9 +29,10 @@ func (b *bootstrapper) promptLogin() {
 	entry.SetPlaceholderText(authScheme + "…")
 	entry.SetActivatesDefault(true)
 
-	d := adw.NewAlertDialog(L("Login with Browser"),
-		L("Optionally, paste the roblox-studio-auth link given by the browser "+
-			"below, so that the browser does not have to open Vinegar."))
+	d := adw.NewAlertDialog(L("Sign In with Browser"),
+		L("After signing in with your browser, you may optionally paste the "+
+			"roblox-studio-auth link given by the browser below, so that the "+
+			"browser does not have to open Vinegar."))
 	d.SetExtraChild(&entry.Widget)
 	d.AddResponses("close", L("Close"), "login", L("Log In"))
 	d.SetCloseResponse("close")

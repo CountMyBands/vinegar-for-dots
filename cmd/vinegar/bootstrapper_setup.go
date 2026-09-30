@@ -57,7 +57,7 @@ func (b *bootstrapper) setupExecute() error {
 		return fmt.Errorf("fflags: %w", err)
 	}
 
-	if err := b.trustSystemCerts(); err != nil {
+	if err := b.addStudioCerts(); err != nil {
 		return fmt.Errorf("certificates: %w", err)
 	}
 

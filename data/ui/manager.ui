@@ -188,6 +188,12 @@
                               </object>
                             </child>
                             <child>
+                              <object class="AdwEntryRow" id="ca_certs_row">
+                                <property name="show-apply-button">True</property>
+                                <property name="title">Additional CA Certificates for Studio (PEM file path)</property>
+                              </object>
+                            </child>
+                            <child>
                               <object class="AdwSwitchRow" id="discord_row">
                                 <property name="subtitle">Display your development status on your Discord profile</property>
                                 <property name="title">Share Activity on Discord</property>

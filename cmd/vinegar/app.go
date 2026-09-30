@@ -135,7 +135,7 @@ func (a *app) startup(_ gio.Application) {
 
 	a.boot = a.newBootstrapper()
 
-	browser, err := serveBrowser()
+	browser, err := a.serveBrowser()
 	if err != nil {
 		slog.Error("Failed to serve URLs opened within Wine, using Wine's browser handling", "err", err)
 	} else {

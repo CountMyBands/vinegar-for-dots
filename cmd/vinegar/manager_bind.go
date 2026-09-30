@@ -140,6 +140,7 @@ func (m *manager) connectElements() {
 	})
 
 	simpleEntry("launcher_row", &cfg.Launcher)
+	simpleEntry("ca_certs_row", &cfg.CACerts)
 
 	simpleSwitch("discord_row", &cfg.DiscordRPC)
 	simpleSwitch("gamemode_row", &cfg.GameMode)

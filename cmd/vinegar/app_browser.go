@@ -16,6 +16,7 @@ import (
 	"github.com/adrg/xdg"
 	"github.com/sewnie/wine"
 	"github.com/vinegarhq/vinegar/internal/dirs"
+	"github.com/vinegarhq/vinegar/internal/gutil"
 	"golang.org/x/sys/unix"
 )
 
@@ -62,7 +63,7 @@ func browserCommand() string {
 
 // serveBrowser writes the winebrowser helper and serves URLs opened within
 // Wine, until the FIFO is closed.
-func serveBrowser() (io.Closer, error) {
+func (a *app) serveBrowser() (io.Closer, error) {
 	if err := os.MkdirAll(dirs.Data, 0o755); err != nil {
 		return nil, err
 	}
@@ -100,7 +101,7 @@ func serveBrowser() (io.Closer, error) {
 				return
 			}
 			if uri := strings.TrimSuffix(msg, "\x00"); uri != "" {
-				openFromWine(uri)
+				a.openFromWine(uri)
 			}
 		}
 	}()
@@ -118,9 +119,13 @@ func (s browserServer) Close() error {
 
 // openFromWine opens the given URL, or Unix path given by winebrowser for
 // file URLs, with the user's default application for it.
-func openFromWine(uri string) {
+func (a *app) openFromWine(uri string) {
 	log := slog.With("url", redactURL(uri))
 	log.Info("Opening URL from Wine")
+
+	if isStudioLogin(uri) {
+		gutil.IdleAdd(a.boot.promptLogin)
+	}
 
 	cmd := exec.Command("xdg-open", uri)
 	if err := cmd.Start(); err != nil {
@@ -132,6 +137,28 @@ func openFromWine(uri string) {
 			log.Error("Failed to open URL from Wine", "err", err)
 		}
 	}()
+}
+
+// isStudioLogin reports whether the given URL is Studio's sign in page,
+// which redirects to a roblox-studio-auth URI once signed in.
+func isStudioLogin(uri string) bool {
+	u, err := url.Parse(uri)
+	if err != nil || (u.Scheme != "https" && u.Scheme != "http") ||
+		(u.Hostname() != "roblox.com" && !strings.HasSuffix(u.Hostname(), ".roblox.com")) {
+		return false
+	}
+
+	// The redirect URI may be nested within other URL parameters.
+	s := u.RawQuery
+	for range 3 {
+		if strings.Contains(strings.ToLower(s), authScheme) {
+			return true
+		}
+		if s, err = url.QueryUnescape(s); err != nil {
+			return false
+		}
+	}
+	return strings.Contains(strings.ToLower(s), authScheme)
 }
 
 // redactURL returns only the scheme and host of the given URL,

@@ -51,6 +51,10 @@ type Studio struct {
 	DiscordRPC bool   `toml:"discord_rpc"`
 	GameMode   bool   `toml:"gamemode"`
 
+	// Path to a PEM file of additional CA certificates to be trusted
+	// by Studio, which only trusts its own bundled certificates.
+	CACerts string `toml:"ca_certificates"`
+
 	Env    map[string]string `toml:"env"`
 	FFlags rbxbin.FFlags     `toml:"fflags"`
 
