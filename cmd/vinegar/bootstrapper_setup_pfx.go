@@ -2,12 +2,16 @@ package main
 
 import (
 	"archive/tar"
+	"bytes"
 	"compress/gzip"
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 
@@ -191,7 +195,71 @@ func (b *bootstrapper) downloadWebView(installed string) error {
 	}
 
 	b.message(L("Downloading WebView"), "catalog", d.Delivery.CatalogID)
-	return netutil.DownloadProgress(d.URL, inst, &b.pbar)
+	return b.fetchWebView(d, inst)
+}
+
+// webViewHosts are Microsoft's delivery hosts which serve the same signed
+// WebView download URLs, used as fallbacks for one another.
+var webViewHosts = []string{
+	"msedge.b.tlu.dl.delivery.mp.microsoft.com",
+	"msedge.f.tlu.dl.delivery.mp.microsoft.com",
+}
+
+// fetchWebView downloads the given WebView download to the named file,
+// trying each of Microsoft's delivery hosts until one succeeds. As the
+// download is served over plain HTTP, it is verified against the SHA-256
+// checksum given by Microsoft.
+func (b *bootstrapper) fetchWebView(d *webview2.Download, name string) error {
+	want, err := base64.StdEncoding.DecodeString(d.Hashes.Sha256)
+	if err != nil || len(want) != sha256.Size {
+		return fmt.Errorf("bad checksum %q", d.Hashes.Sha256)
+	}
+
+	u, err := url.Parse(d.URL)
+	if err != nil {
+		return err
+	}
+	urls := []string{d.URL}
+	for _, host := range webViewHosts {
+		if host != u.Host {
+			alt := *u
+			alt.Host = host
+			urls = append(urls, alt.String())
+		}
+	}
+
+	var errs []error
+	for _, u := range urls {
+		err := netutil.DownloadProgress(u, name, &b.pbar)
+		if err == nil {
+			err = verifySHA256(name, want)
+		}
+		if err == nil {
+			return nil
+		}
+
+		slog.Warn("WebView download failed", "url", u, "err", err)
+		os.Remove(name)
+		errs = append(errs, err)
+	}
+	return errors.Join(errs...)
+}
+
+func verifySHA256(name string, want []byte) error {
+	f, err := os.Open(name)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return err
+	}
+	if got := h.Sum(nil); !bytes.Equal(got, want) {
+		return fmt.Errorf("checksum mismatch: got %x, want %x", got, want)
+	}
+	return nil
 }
 
 // installWebView checks the Studio WebView version and installs WebView

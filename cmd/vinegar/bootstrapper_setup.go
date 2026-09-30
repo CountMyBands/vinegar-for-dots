@@ -57,6 +57,10 @@ func (b *bootstrapper) setupExecute() error {
 		return fmt.Errorf("fflags: %w", err)
 	}
 
+	if err := b.trustSystemCerts(); err != nil {
+		return fmt.Errorf("certificates: %w", err)
+	}
+
 	// Does nothing if WebView is disabled, preferred to download
 	// a large installer before Wineprefix initialization.
 	// before Wineprefix initialization.
