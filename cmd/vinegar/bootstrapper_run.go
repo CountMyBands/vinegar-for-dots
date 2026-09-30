@@ -60,7 +60,7 @@ func (b *bootstrapper) execute(args ...string) error {
 		return err
 	}
 
-	b.message(L("Launching Studio"), "cmd", cmd)
+	b.message(L("Launching Studio"), "args", redactArgs(cmd.Args))
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)

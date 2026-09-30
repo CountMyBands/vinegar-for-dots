@@ -79,6 +79,14 @@ func (b *bootstrapper) setupExecute() error {
 		return err
 	}
 
+	// Only if Vinegar is serving URLs, otherwise Wine's default
+	// browser handling is kept.
+	if b.browser != nil {
+		if err := b.setWineBrowser(offline); err != nil {
+			return fmt.Errorf("browser: %w", err)
+		}
+	}
+
 	stop()
 
 	if err := b.installWebView(webview); err != nil {

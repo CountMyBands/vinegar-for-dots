@@ -41,6 +41,8 @@ type app struct {
 
 	mgr  *manager // nullable
 	boot *bootstrapper
+
+	browser io.Closer // nullable, see serveBrowser
 }
 
 func newApp() *app {
@@ -133,6 +135,13 @@ func (a *app) startup(_ gio.Application) {
 
 	a.boot = a.newBootstrapper()
 
+	browser, err := serveBrowser()
+	if err != nil {
+		slog.Error("Failed to serve URLs opened within Wine, using Wine's browser handling", "err", err)
+	} else {
+		a.browser = browser
+	}
+
 	// Required for GameMode
 	conn, err := gio.BusGetSync(gio.GBusTypeSessionValue, nil)
 	if err != nil {
@@ -208,6 +217,10 @@ func (a *app) commandLine(_ gio.Application, clPtr uintptr) int32 {
 }
 
 func (a *app) shutdown(_ gio.Application) {
+	if a.browser != nil {
+		a.browser.Close()
+	}
+
 	if err := a.boot.backupSettings(); err != nil {
 		slog.Error("Failed to backup Studio settings", "err", err)
 	}
