@@ -50,7 +50,7 @@ func (b *bootstrapper) promptLogin() {
 		if d.ChooseFinish(res) != "login" || uri == "" {
 			return
 		}
-		if !strings.HasPrefix(uri, authScheme) {
+		if !isAuthURI(uri) {
 			b.showError(errors.New(L("The given link is not a roblox-studio-auth link.")))
 			return
 		}

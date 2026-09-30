@@ -92,7 +92,7 @@ func (b *bootstrapper) run(args ...string) error {
 
 	// Without a user authenticated beforehand, Studio will ask to sign in.
 	if b.count == 0 && b.rbx.Security == "" &&
-		(len(args) == 0 || !strings.HasPrefix(args[0], authScheme)) {
+		(len(args) == 0 || !isAuthURI(args[0])) {
 		gutil.IdleAdd(b.promptLogin)
 	}
 
